@@ -1,0 +1,14 @@
+<!ELEMENT config (entry+,note)>
+<!ELEMENT entry (font+)>
+<!ATTLIST entry id CDATA #IMPLIED>
+<!ATTLIST entry value CDATA #IMPLIED>
+<!ELEMENT note (to,from,heading,body,koko)>
+<!ELEMENT font (name,size)>
+<!ELEMENT to (#PCDATA)>
+<!ELEMENT from (#PCDATA)>
+<!ELEMENT heading (#PCDATA)>
+<!ELEMENT body (#PCDATA)>
+<!ELEMENT koko EMPTY>
+<!ELEMENT name (#PCDATA)>
+<!ELEMENT size (#PCDATA)>
+<!ATTLIST size id CDATA #IMPLIED>

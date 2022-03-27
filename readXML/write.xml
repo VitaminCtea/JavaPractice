@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE config SYSTEM "writeDTD.dtd">
+<config>
+    <entry id="test" value="entry">
+        <font>
+            <name>lala</name>
+            <size>90</size>
+        </font>
+        <font>
+            <name>Tom</name>
+            <size id="999">31</size>
+        </font>
+    </entry>
+    <entry id="title" value="entry">
+        <font>
+            <name>lala</name>
+            <size>90</size>
+        </font>
+        <font>
+            <name>Helvetica</name>
+            <size id="999">36</size>
+        </font>
+    </entry>
+    <entry>
+        <font>
+            <name>lala</name>
+            <size>90</size>
+        </font>
+    </entry>
+    <note>
+        <to>George</to>
+        <from>John</from>
+        <heading>Reminder</heading>
+        <body>Don't forget the meeting!</body>
+        <koko/>
+    </note>
+</config>

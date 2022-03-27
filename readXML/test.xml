@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 指定文档类型规则 -->
+<!DOCTYPE config SYSTEM "readXML/testDTD.dtd">
+<config>
+    <entry id="test">
+        <font id="font">
+            <name id="person">Tom</name>
+            <size id="age">31</size>
+        </font>
+    </entry>
+    <entry id="title">
+        <font>
+            <name>Helvetica</name>
+            <size>36</size>
+        </font>
+    </entry>
+    <entry id="body">
+        <font>
+            <name>Times Roman</name>
+            <size>12</size>
+        </font>
+    </entry>
+    <entry id="background">
+        <color>
+            <red>0</red>
+            <green>50</green>
+            <blue>100</blue>
+        </color>
+    </entry>
+</config>

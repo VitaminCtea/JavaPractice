@@ -1,0 +1,23 @@
+<!--
+    文档类型规则，相当于在XML文件中书写<!DOCTYPE rootElement [ 每个元素的规则... ]>
+    元素属性规则：<!ATTLIST element attribute type default>
+    元素规则：<!ELEMENT element (child..., (child...))>
+    #PCDATA表示文本
+-->
+
+<!ELEMENT config (entry)+>
+<!ELEMENT entry (font|color)>
+
+<!ATTLIST entry id ID #REQUIRED>
+<!ATTLIST font id ID #IMPLIED>
+<!ATTLIST name id ID #IMPLIED>
+<!ATTLIST size id ID #IMPLIED>
+
+<!ELEMENT font (name, size)>
+<!ELEMENT name (#PCDATA)>
+<!ELEMENT size (#PCDATA)>
+
+<!ELEMENT color (red, green, blue)>
+<!ELEMENT red (#PCDATA)>
+<!ELEMENT green (#PCDATA)>
+<!ELEMENT blue (#PCDATA)>

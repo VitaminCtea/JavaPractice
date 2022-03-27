@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="UTF-8"?>&lt;!ELEMENT config (entry)+&lt;!ELEMENT entry (font)&lt;!ELEMENT name #PCDATA&lt;!ELEMENT size #PCDATA&lt;!ATTLIST entry id ID CDATA #REQUIRED
