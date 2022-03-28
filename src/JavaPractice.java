@@ -6056,6 +6056,100 @@ class RomanNumeralsTest {
     }
 }
 
+// 自定义创建线程的线程工厂
+class CustomThreadFactory implements java.util.concurrent.ThreadFactory {
+    private final String factoryName;
+    public CustomThreadFactory(String factoryName) { this.factoryName = factoryName; }
+
+    @Override public Thread newThread(Runnable runnable) { return new CustomThread(runnable, factoryName); }
+}
+
+class CustomThread extends Thread {
+    private static final String DEFAULT_THREAD_NAME = "customThread";
+    private static final AtomicInteger createdCount = new AtomicInteger();
+    private static final AtomicInteger alive = new AtomicInteger();
+    private static final Logger logger = Logger.getAnonymousLogger();
+    private static volatile boolean debugLifecycle = false;
+
+    public CustomThread(Runnable runnable) { this(runnable, DEFAULT_THREAD_NAME); }
+    public CustomThread(Runnable runnable, String threadName) {
+        super(runnable, threadName + "-" + createdCount.incrementAndGet());
+        setUncaughtExceptionHandler((Thread t, Throwable e) -> logger.log(Level.SEVERE, "UNCAUGHT in thread " + t.getName(), e));
+    }
+
+    @Override public void run() {
+        boolean isEnableDebug = debugLifecycle;
+        if (isEnableDebug) logger.info("Created " + getName());
+        try {
+            alive.incrementAndGet();
+            super.run();
+        } finally {
+            alive.decrementAndGet();
+            if (isEnableDebug) logger.info(String.format("Exiting %s, isAlive: %s", getName(), getTreadsAlive() == 0));
+        }
+    }
+
+    public static int getThreadsCreated() { return createdCount.get(); }
+    public static int getTreadsAlive() { return alive.get(); }
+    public static boolean getDebug() { return debugLifecycle; }
+    public static void setDebug(boolean b) { debugLifecycle = b; }
+}
+
+class CustomThreadPoolExecutor extends ThreadPoolExecutor {
+    private final Logger logger = Logger.getLogger("CustomThreadPoolExecutor");
+    public CustomThreadPoolExecutor(
+            int corePoolSize,
+            int maximumPoolSize,
+            long keepAliveTime,
+            TimeUnit unit,
+            BlockingQueue<Runnable> workQueue,
+            java.util.concurrent.ThreadFactory threadFactory
+    ) {
+        this(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue, threadFactory, new ThreadPoolExecutor.CallerRunsPolicy());
+    }
+
+    public CustomThreadPoolExecutor(
+            int corePoolSize,
+            int maximumPoolSize,
+            long keepAliveTime,
+            TimeUnit unit,
+            BlockingQueue<Runnable> workQueue,
+            java.util.concurrent.ThreadFactory threadFactory,
+            RejectedExecutionHandler handler
+    ) {
+        super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue, threadFactory, handler);
+    }
+
+    @Override protected void beforeExecute(Thread t, Runnable r) {
+        logger.info(String.format("Thread %s is ready to start running the task! The execution method is %s", t.getName(), r));
+    }
+
+    @Override protected void afterExecute(Runnable r, Throwable t) {
+        logger.info(String.format("Thread %s task execution completed! Error: %s", r.getClass().getName(), Objects.isNull(t) ? null : t.getMessage()));
+    }
+
+    @Override protected void terminated() { logger.info("Thread pool ready to shut down!"); }
+}
+
+class CustomThreadPoolExecutorTest {
+    public static void main(String[] args) {
+        final int N_THREADS = Runtime.getRuntime().availableProcessors();
+        CustomThread.setDebug(true);
+        ThreadPoolExecutor customThreadPoolExecutor =
+                new CustomThreadPoolExecutor(
+                        N_THREADS,
+                        N_THREADS,
+                        0L,
+                        TimeUnit.MILLISECONDS,
+                        new LinkedBlockingQueue<>(),
+                        new CustomThreadFactory("CustomThreadFactory")
+                );
+
+        for (int i = 0; i < N_THREADS; i++) customThreadPoolExecutor.execute(() -> {});
+        customThreadPoolExecutor.shutdown();
+    }
+}
+
 public class JavaPractice implements Cloneable {
     // 演示实例化一个对象时的初始化顺序
     // Note: 初始化顺序为先静态成员和方法，然后是非静态成员和方法，最后是构造方法(所有的初始化顺序是按照书写顺序进行初始化的)
