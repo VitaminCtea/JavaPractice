@@ -29,7 +29,6 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.font.FontRenderContext;
 import java.awt.image.BufferedImage;
-import java.awt.print.Paper;
 import java.io.*;
 import java.lang.annotation.Annotation;
 import java.lang.annotation.*;
@@ -6095,6 +6094,7 @@ class CustomThread extends Thread {
     public static void setDebug(boolean b) { debugLifecycle = b; }
 }
 
+// 自定义配置线程池
 class CustomThreadPoolExecutor extends ThreadPoolExecutor {
     private final Logger logger = Logger.getLogger("CustomThreadPoolExecutor");
     public CustomThreadPoolExecutor(
@@ -6147,6 +6147,108 @@ class CustomThreadPoolExecutorTest {
 
         for (int i = 0; i < N_THREADS; i++) customThreadPoolExecutor.execute(() -> {});
         customThreadPoolExecutor.shutdown();
+    }
+}
+
+/*
+* 奇数罗伯法
+* 所有条件判断均采用罗伯法的规则，即所有某个数的右上原则
+* 首先先将1(最小的数放在第一行的中间位置)
+* 然后从2开始循环，分别有row - 1 < 0 && col + 1 < n、row - 1 >= 0 && col + 1 == n、row > 0 && matrix[row - 1][col + 1] != 0 || row - 1 < 0 && col + 1 == n情况
+* 以3 × 3矩阵为例：
+*               —————————————————————————
+*               |       |   1   |   6   |
+*               |   3   |       |       |
+*               |       |       |   2   |
+*               —————————————————————————
+* 数字1符合row - 1 < 0 && col + 1 < n情况，此时需要row = n - 1, col = col + 1
+* 数字2符合row - 1 >= 0 && col + 1 == n情况，此时需要row = row - 1, col = 0
+* 数字3、6符合row > 0 && matrix[row - 1][col + 1] != 0 || row - 1 < 0 && col + 1 == n情况，即右上角有值或者行列同时越界情况，此时只需要row = row + 1, col不变
+* 其中row > 0是必须的，因为row = 0时，matrix[row - 1][col + 1]会越界，所以要提前判断
+* 如此循环，即可正确填写到矩阵中，形成每一行、每一列、斜列的幻数和是相同的，其中幻数和 = (1 + 2 + ... + n * n) / n，例如：n = 3时，(1 + 2 ... + 9) / 3 = 15(幻数和)
+*/
+class MagicNumber {
+    public static class MagicNumberResult {
+        private final int[][] matrixResult;
+        private final int magicSum;
+        public MagicNumberResult(int[][] result, int magicSum) {
+            this.matrixResult = result;
+            this.magicSum = magicSum;
+        }
+
+        public int[][] getMatrixResult() { return matrixResult; }
+        public int getMagicSum() { return magicSum; }
+        @Override public String toString() { return "幻数矩阵结果是：" + Arrays.deepToString(matrixResult) + ", 幻数和是：" + magicSum; }
+    }
+
+    public static MagicNumberResult getResult(int n) {
+        int[][] matrix = new int[n][n];
+        final int N_SQUARE = n * n;
+        int row = 0;
+        int col = n >> 1;
+        matrix[row][col] = 1;
+
+        for (int k = 2; k <= N_SQUARE; k++) {
+            if (row - 1 < 0 && col + 1 < n) { row = n - 1; col++; }
+            else if (row - 1 >= 0 && col + 1 == n) { row--; col = 0; }
+            else if (row > 0 && matrix[row - 1][col + 1] != 0 || row - 1 < 0 && col + 1 == n) { row++; }
+            else { row--; col++; }
+            matrix[row][col] = k;
+        }
+
+        return new MagicNumberResult(matrix, IntStream.rangeClosed(1, N_SQUARE).sum() / n);
+    }
+
+    // 校验结果的正确性，通过把每一行的数、每一列的数、斜列的数各自相加是否等于幻数和来判断
+    public static boolean test(int n) {
+        MagicNumberResult magicNumberResult = MagicNumber.getResult(n);
+        int[][] matrix = magicNumberResult.getMatrixResult();
+        int magicSum = magicNumberResult.getMagicSum();
+        List<Boolean> verification = new ArrayList<>(2 * n + 1);
+
+        sum(matrix, n, magicSum, true, verification);
+        sum(matrix, n, magicSum, false, verification);
+
+        verification.add(magicSum == IntStream.range(0, n).reduce(0, (r, i) -> r + matrix[i][i]));
+
+        return verification.stream().allMatch(x -> x == true);
+    }
+
+    private static void sum(int[][] matrix, int n, int magicSum, boolean isRow, List<Boolean> verification) {
+        traverse(
+                n,
+                i -> verification.add(
+                        magicSum == IntStream.range(0, n).reduce(0, (r, index) -> r + matrix[isRow ? i : index][isRow ? index : i])));
+    }
+
+    public static void print(int n) {
+        MagicNumberResult magicNumberResult = MagicNumber.getResult(n);
+        int[][] matrix = magicNumberResult.getMatrixResult();
+        System.out.println(magicNumberResult);
+        traverse(n, i -> {
+            traverse(n, j -> {
+                int num = matrix[i][j];
+                System.out.print(num);
+                if (j < n - 1) printWhiteSpaceCharacters(num);
+            });
+            System.out.println();
+        });
+    }
+
+    private static void traverse(int n, Consumer<Integer> func) { for (int i = 0; i < n; i++) func.accept(i); }
+
+    private static void printWhiteSpaceCharacters(int num) {
+        String whiteSpaceCharacters = "\t\t";
+        if (num < 10) whiteSpaceCharacters = " " + whiteSpaceCharacters;
+        System.out.print(whiteSpaceCharacters);
+    }
+
+}
+
+class MagicNumberTest {
+    public static void main(String[] args) {
+        MagicNumber.print(3);
+        System.out.println("矩阵内的幻数是否填写正确？ " + MagicNumber.test(5));
     }
 }
 
