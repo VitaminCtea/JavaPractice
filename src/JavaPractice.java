@@ -29,6 +29,7 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.font.FontRenderContext;
 import java.awt.image.BufferedImage;
+import java.beans.Introspector;
 import java.io.*;
 import java.lang.annotation.Annotation;
 import java.lang.annotation.*;
@@ -73,6 +74,7 @@ import java.util.function.*;
 import java.util.logging.FileHandler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.MatchResult;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.*;
@@ -2457,7 +2459,7 @@ class TypeLiteral<T> {
     @Override public int hashCode() { return type.hashCode(); }
 }
 
-class Formatter {
+class MyFormatter {
     private final Map<TypeLiteral<?>, Function<?, String>> rules = new HashMap<>();
     public <T> void forType(TypeLiteral<T> type, Function<T, String> formatterForType) { rules.put(type, formatterForType); }
     public String formatFields(Object obj) throws IllegalArgumentException, IllegalAccessException {
@@ -2495,10 +2497,10 @@ class TypeLiterals {
         return stringBuilder.toString();
     }
     public static void main(String[] args) throws Exception {
-        Formatter formatter = new Formatter();
-        formatter.forType(new TypeLiteral<ArrayList<Integer>>(){}, lst -> join(" ", lst));
-        formatter.forType(new TypeLiteral<ArrayList<Character>>(){}, lst -> "\"" + join(" ", lst) + "\"");
-        System.out.println(formatter.formatFields(new Sample()));
+        MyFormatter myFormatter = new MyFormatter();
+        myFormatter.forType(new TypeLiteral<ArrayList<Integer>>(){}, lst -> join(" ", lst));
+        myFormatter.forType(new TypeLiteral<ArrayList<Character>>(){}, lst -> "\"" + join(" ", lst) + "\"");
+        System.out.println(myFormatter.formatFields(new Sample()));
     }
 }
 
@@ -3211,7 +3213,7 @@ class Binary {
                 .toString();
     }
 
-    public static Map<String, Object> recordInfo(int num, int validBit) {
+    private static Map<String, Object> recordInfo(int num, int validBit) {
         int[] binaryArray = new int[32];
 
         if (num < 0) {
@@ -3234,9 +3236,9 @@ class Binary {
         return new HashMap<>() {{ put("highestBitIndex", binaryArray.length - highestCarryCount - 1); put("binaryArray", binaryArray); }};
     }
 
-    public static int calcRemainingNum(int val, int carryCount) { return val - (int) Math.pow(2, carryCount); }
-    public static int calcCarryBitCount(int val) { return (int) Math.floor(Math.log(val) / Math.log(2)); }
-    public static void setValidBit(int[] binaryArray, int carryCount, int validBit) { binaryArray[binaryArray.length - carryCount - 1] = validBit; }
+    private static int calcRemainingNum(int val, int carryCount) { return val - (int) Math.pow(2, carryCount); }
+    private static int calcCarryBitCount(int val) { return (int) Math.floor(Math.log(val) / Math.log(2)); }
+    private static void setValidBit(int[] binaryArray, int carryCount, int validBit) { binaryArray[binaryArray.length - carryCount - 1] = validBit; }
 
     public static void main(String[] args) { System.out.println(toBinary(1234)); }
 }
@@ -4715,11 +4717,9 @@ class TestReentrantLockCondition {
 // 抽象队列同步器(简称：AQS)
 class NonReentrantLock implements Lock, java.io.Serializable {
     private static class Sync extends AbstractQueuedSynchronizer {
-        @Override
-        protected boolean isHeldExclusively() { return getState() == 1; }
+        @Override protected boolean isHeldExclusively() { return getState() == 1; }
 
-        @Override
-        public boolean tryAcquire(int acquires) {
+        @Override public boolean tryAcquire(int acquires) {
             if (compareAndSetState(0, 1)) {
                 setExclusiveOwnerThread(Thread.currentThread());
                 return true;
@@ -4727,8 +4727,7 @@ class NonReentrantLock implements Lock, java.io.Serializable {
             return false;
         }
 
-        @Override
-        protected boolean tryRelease(int releases) {
+        @Override protected boolean tryRelease(int releases) {
             if (getState() == 0) { throw new IllegalMonitorStateException(); }
             setExclusiveOwnerThread(null);
             setState(0);
@@ -6251,6 +6250,482 @@ class MagicNumberTest {
     public static void main(String[] args) {
         MagicNumber.print(3);
         System.out.println("矩阵内的幻数是否填写正确？ " + MagicNumber.test(5));
+    }
+}
+
+// 在异常中打印日志
+class LoggingException {
+    private static final Logger logger = Logger.getLogger("LoggingException");
+    public static void logException(Exception e) {
+        StringWriter trace = new StringWriter();
+        e.printStackTrace(new PrintWriter(trace));
+        logger.severe(trace.toString());
+    }
+
+    public static void main(String[] args) {
+        try { throw new NullPointerException(); } catch (NullPointerException e) { e.printStackTrace();logException(e); }
+    }
+}
+
+class MyException extends Exception {
+    private int x;
+    public MyException() {}
+    public MyException(String msg) { super(msg); }
+    public MyException(String msg, int x) { super(msg); this.x = x; }
+    public int val() { return x; }
+    @Override public String getMessage() { return "Detail Message: " + x + " " + super.getMessage(); }
+}
+
+class ExtraFeatures {
+    private static enum ContructorType { NONPARAMETRIC_CONSTRUCTION_METHOD, CONSTRUCTION_METHOD_OF_PARAMETER, CONSTRUCTION_METHOD_OF_TWO_PARAMETERS; }
+
+    public static void f() throws MyException { printException(ContructorType.NONPARAMETRIC_CONSTRUCTION_METHOD, 0); }
+    public static void g() throws MyException { printException(ContructorType.CONSTRUCTION_METHOD_OF_PARAMETER, 0); }
+    public static void h() throws MyException { printException(ContructorType.CONSTRUCTION_METHOD_OF_TWO_PARAMETERS, 47); }
+
+    private static void printException(ContructorType type, int num) throws MyException {
+        StackTraceElement[] stackTraceElement = Thread.currentThread().getStackTrace();
+        String methodNameDesc = stackTraceElement[2].getMethodName() + "()";
+        System.out.println("Throwing MyException from " + methodNameDesc);
+        switch (type) {
+            case NONPARAMETRIC_CONSTRUCTION_METHOD: throw new MyException();
+            case CONSTRUCTION_METHOD_OF_PARAMETER: throw new MyException("Originated in " + methodNameDesc);
+            case CONSTRUCTION_METHOD_OF_TWO_PARAMETERS: throw new MyException("Originated in " + methodNameDesc, num);
+        }
+    }
+
+    public static void main(String[] args) {
+        try { f(); } catch (MyException e) { e.printStackTrace(System.out); }
+        try { g(); } catch (MyException e) { e.printStackTrace(System.out); }
+        try { h(); } catch (MyException e) { e.printStackTrace(System.out); System.out.println("e.val() = " + e.val()); }
+    }
+}
+
+class StringJoinUtil {
+    private static class StringJoinAttribute<T> {
+        private T data;
+        private int len;
+        private int step;
+        private Function<Integer, String> callback;
+        private String delimiter;
+        private String prefix;
+        private String suffix;
+
+        private static class StringJoinBuild<T> {
+            private T data;
+            private int len;
+            private int step;
+            private Function<Integer, String> callback;
+            private String delimiter;
+            private String prefix;
+            private String suffix;
+
+            public StringJoinBuild addData(T arr) { this.data = arr; return this; }
+            public StringJoinBuild addLen(int len) { this.len = len; return this; }
+            public StringJoinBuild addStep(int step) { this.step = step; return this; }
+            public StringJoinBuild addCallback(Function<Integer, String> callback) { this.callback = callback; return this; }
+            public StringJoinBuild addDelimiter(String delimiter) { this.delimiter = delimiter; return this; }
+            public StringJoinBuild addPrefix(String prefix) { this.prefix = prefix; return this; }
+            public StringJoinBuild addSuffix(String suffix) { this.suffix = suffix; return this; }
+            public StringJoinAttribute build() { return new StringJoinAttribute(this); }
+        }
+
+        private StringJoinAttribute() {}
+        private StringJoinAttribute(StringJoinBuild stringJoinBuild) {
+            data = (T) stringJoinBuild.data;
+            len = stringJoinBuild.len;
+            step = stringJoinBuild.step;;
+            callback = stringJoinBuild.callback;
+            delimiter = stringJoinBuild.delimiter;
+            prefix = stringJoinBuild.prefix;
+            suffix = stringJoinBuild.suffix;
+        }
+    }
+
+    public static <T> String join(T[] data, String delimiter) { return join(data, 1, delimiter); }
+    public static <T> String join(T[] data, String delimiter, String prefix, String suffix) { return join(data, 1, delimiter, prefix, suffix); }
+    public static <T> String join(T[] data, int step, String delimiter) { return join(data, step, delimiter, "", ""); }
+    public static <T> String join(T[] data, int step, String delimiter, String prefix, String suffix) {
+        StringJoinAttribute stringJoinAttribute =
+                createStringJoinBuild(delimiter, prefix, suffix, step)
+                        .addData(data)
+                        .addLen(data.length)
+                        .addCallback((Function<Integer, String>) i -> data[i].toString())
+                        .build();
+        return join(stringJoinAttribute);
+    }
+
+    public static <T> String join(List<T> data, String delimiter) { return join(data, 1, delimiter); }
+    public static <T> String join(List<T> data, String delimiter, String prefix, String suffix) { return join(data, 1, delimiter, prefix, suffix); }
+    public static <T> String join(List<T> data, int step, String delimiter) { return join(data, step, delimiter, "", ""); }
+    public static <T> String join(List<T> data, int step, String delimiter, String prefix, String suffix) {
+        StringJoinAttribute stringJoinAttribute =
+                createStringJoinBuild(delimiter, prefix, suffix, step)
+                        .addData(data)
+                        .addLen(data.size())
+                        .addCallback((Function<Integer, String>) i -> data.get(i).toString())
+                        .build();
+        return join(stringJoinAttribute);
+    }
+
+    public static String join(CharSequence data, String delimiter) { return join(data, 1, delimiter); }
+    public static String join(CharSequence data, String delimiter, String prefix, String suffix) { return join(data, 1, delimiter, prefix, suffix); }
+    public static String join(CharSequence data, int step, String delimiter) { return join(data, step, delimiter, "", ""); }
+    public static String join(CharSequence data, int step, String delimiter, String prefix, String suffix) {
+        StringJoinAttribute stringJoinAttribute =
+                createStringJoinBuild(delimiter, prefix, suffix, step)
+                        .addData(data)
+                        .addLen(data.length())
+                        .addCallback((Function<Integer, String>) i -> String.valueOf(data.charAt(i)))
+                        .build();
+        return join(stringJoinAttribute);
+    }
+
+    private static StringJoinAttribute.StringJoinBuild createStringJoinBuild(String delimiter, String prefix, String suffix, int step) {
+        return new StringJoinAttribute.StringJoinBuild().addStep(step).addDelimiter(delimiter).addPrefix(prefix).addSuffix(suffix);
+    }
+
+    private static <T> String join(StringJoinAttribute<T> attribute) {
+        String prefix = Objects.isNull(attribute.prefix) ? "" : attribute.prefix;
+        String suffix = Objects.isNull(attribute.suffix) ? "" : attribute.suffix;
+
+        int len = attribute.len;
+        T data = attribute.data;
+        int step = attribute.step;
+        Function<Integer, String> callback = attribute.callback;
+
+        StringJoiner stringJoiner = new StringJoiner(attribute.delimiter, prefix, suffix);
+
+        int index = 0;
+        while (index < len) stringJoiner.add(slice(data, callback, index, Math.min(index += step, len)));
+
+        return stringJoiner.toString();
+    }
+
+    public static <T> String slice(T data, Function<Integer, String> callback, int start, int end) {
+        int index = -1;
+        int delta = end - start;
+        StringBuilder result = new StringBuilder();
+        while (++index < delta) result.append(callback.apply(index + start));
+        return result.toString();
+    }
+}
+
+class ThreatAnalyzer {
+    private static final String threatData =
+            "58.27.82.161@02/10/2005, 204.45.234.40@02/11/2005, 58.27.82.161@02/11/2005, 58.27.82.161@02/12/2005, 58.27.82.161@02/12/2005, " +
+                    "[Next log section with different data format]";
+    public static void main(String[] args) {
+        /*
+         * new Scanner(threatData) == new Scanner(threatData, Pattern.compile("\\p{javaWhitespace}+")); 第二个构造参数默认使用空白字符来进行分隔文本
+         * 正则表达式量词描述了一个模式吸收输入文本的方式，分为：贪婪型、勉强型、占有型
+         * 贪婪型：仅只有一个 + 字符时，代表贪婪型，例：\\d?、\\d*、\\d+、\\d{n | n, | n, m};
+         * 勉强型：贪婪型后面带有 ? 时，代表勉强型，匹配满足模式所需的最少字符数，也称懒惰的、最少匹配的、非贪婪的、或不贪婪的，例：\\d??、\\d*?、\\d+?、\\d{n | n, | n, m}?
+         * 占有型：贪婪型后面带有 + 时，代表占有型，在匹配过程中不保存这些中间状态，可以防止回溯，防止正则表达式失控，例：\\d?+, \\d++, \\d*+, \\d{n | n, | n, m}+
+         * Scanner的useDelimiter方法可以指定使用何种字符串或正则表达式来对文本进行分隔，默认是以空白字符进行分隔！delimiter方法可以返回正在作为定界符使用的Pattern对象
+         */
+        Scanner scanner = new Scanner(threatData);
+        scanner.useDelimiter("\\s*+,\\s*+");
+
+        UnaryOperator<String> generatorColorText = ColorTextTool::createRandomColorText;
+        System.out.format(
+                "The regular expression currently used in scanner to separate text is: %s\n",
+                generatorColorText.apply(scanner.delimiter().toString()));
+
+        String pattern = "(\\d+(\\.)\\d+\\2\\d+\\2\\d+)@(\\d{2}/\\d{2}/\\d{4})";
+        while (scanner.hasNext(pattern)) {
+            scanner.next(pattern);
+            MatchResult matchResult = scanner.match();
+            String ip = matchResult.group(1);
+            String date = matchResult.group(3);
+            System.out.format("Threat on %s from %s\n", generatorColorText.apply(date), generatorColorText.apply(ip));
+        }
+    }
+}
+
+class IPAddress {
+    private IPAddress() {}
+    public static void main(String[] args) {
+        System.out.println("1000 0000 0001 1101 1111 1111 1111 1111 -> " +
+                ColorTextTool.createRandomColorText(binaryToIpAddress("1000 0000 0001 1101 1111 1111 1111 1111")));
+        System.out.println("128.29.255.255 -> " +
+                ColorTextTool.createRandomColorText(ipAddressTobinary("128.29.255.255", 4, " ")));
+        System.out.println("split -> " +
+                ColorTextTool.createRandomColorText(StringJoinUtil.join("100000000001110111111111111111", 4, " ")));
+        System.out.println("1100 1111 0000 1110 0010 0001 0101 1100 -> " +
+                ColorTextTool.createRandomColorText(binaryToIpAddress("1100 1111 0000 1110 0010 0001 0101 1100")));
+        System.out.println("0000 1010 0000 1101 0101 1001 0100 1101 -> " +
+                ColorTextTool.createRandomColorText(binaryToIpAddress("0000 1010 0000 1101 0101 1001 0100 1101")));
+        System.out.println("1011 1101 1001 0011 0101 0101 0110 0001 -> " +
+                ColorTextTool.createRandomColorText(binaryToIpAddress("1011 1101 1001 0011 0101 0101 0110 0001")));
+
+        List<String> fruits = new ArrayList<>(){{ add("Apple"); add("Banana"); add("Pear"); add("Grape"); }};
+        System.out.println("Fruits split -> " + ColorTextTool.createRandomColorText(StringJoinUtil.join(fruits, 3, ", ")));
+    }
+
+    public static String ipAddressTobinary(String ipAddress, int step, String delimiter) {
+        String[] splitIpAddress = ipAddress.split("\\.");
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < splitIpAddress.length; i++) {
+            // Integer.toBinaryString方法会忽略前导零，需要修复一下丢失前导零的二进制，来满足最终必须是32位
+            result.append(String.format("%8s", Integer.toBinaryString(Integer.parseInt(splitIpAddress[i]))).replace(" ", "0"));
+        }
+
+        return StringJoinUtil.join(result, step, delimiter);
+    }
+
+    public static String binaryToIpAddress(String binary) {
+        binary = binary.replaceAll("\\s+", "");
+
+        Integer[] ip = new Integer[4];
+        String ipAddressClassification = null;
+        final int GROUP = 8;
+        final int MAX_IP_VALUE = 255;
+        final int BINARY_LENGTH = binary.length();
+
+        if (Stream.of("0", "10", "110", "1110", "11110").noneMatch(binary::startsWith))
+            throw new IllegalArgumentException("Unable to classify IP addresses.");
+
+        for (int i = 0; i < 5; i++) {
+            if ((binary.charAt(i) - '0') == 0) {
+                int c = 65 + i;
+                ipAddressClassification = String.valueOf((char) (65 + i));
+                break;
+            }
+        }
+
+        int index = 0;
+        while (index < BINARY_LENGTH) {
+            String finalBinary = binary;
+            int ipNum =
+                    binaryToDecimal(StringJoinUtil.slice(binary, i -> String.valueOf(finalBinary.charAt(i)), index, Math.min(index + GROUP, BINARY_LENGTH)));
+            if (ipNum > MAX_IP_VALUE) throw new IllegalArgumentException("Binary address is not a valid IP address.");
+            ip[index / GROUP] = Integer.valueOf(ipNum);
+            index += GROUP;
+        }
+
+        String ipAddressType = ipAddressClassification;
+        ipAddressType = ipAddressClassification + "类地址：";
+        if (Character.compare('D', ipAddressClassification.charAt(0)) == 0) ipAddressType = ipAddressClassification + "类多播地址：";
+
+        return ipAddressType + StringJoinUtil.join(ip, ".");
+    }
+
+    public static int binaryToDecimal(String binary) {
+        final int LENGTH = binary.length();
+        int result = 0;
+        for (int i = 0, j = LENGTH - 1; i < LENGTH; i++, j--) result += (1 << j) * (binary.charAt(i) - '0');
+        return result;
+    }
+}
+
+/*
+* 使用读写锁来保证HashMap是同步的，适用于读多写少的线程！当写锁被某一个独占时，那么所有线程将阻塞，直到写成功！
+* 这个锁在必要时候会把写锁降级为读锁，锁降级是指把持住（当前拥有的）写锁，再获取到读锁，随后释放（先前拥有的）写锁的过程。
+* 这种情况可以想象成在写完之后，由于需要获取最新的数据，所以要获取读锁
+* 但读锁升级为写锁的话可能会导致死锁，线程1 readLock -> writeLock, 线程2 writeLock -> readLock，避免死锁的方式是每个线程必须保持锁的顺序是一样的
+* 至于为什么适用于读多写少的场景是因为写锁使用的是独占锁，而读锁使用共享锁
+* 因为写锁如果使用共享锁的话，如果两个线程同时执行自旋，那么结果应该是以最后执行为准
+* 例如：初始值为0，线程1自旋执行compareAndSetState(0, 1)，而线程2自旋执行compareAndSetState(0, 2)，那么结果可能是2，也有可能是1，取决于哪个线程最后执行
+*/
+class ReadWriteMap<K, V> {
+    private final Map<K, V> map;
+    private final ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
+    private final Lock readLock = readWriteLock.readLock();
+    private final Lock writeLock = readWriteLock.writeLock();
+    public ReadWriteMap(Map<K, V> map) { this.map = map; }
+
+    public V put(K k, V v) {
+        writeLock.lock();
+        System.out.println("写线程" + Thread.currentThread().getName() + "获取锁" + writeLock.toString());
+        try { return map.put(k, v); } finally { writeLock.unlock(); }
+    }
+
+    public V get(K k) {
+        readLock.lock();
+        System.out.println("读线程" + Thread.currentThread().getName() + "获取锁" + readLock.toString());
+        try { return map.get(k); } finally { readLock.unlock(); }
+    }
+}
+
+class ReadWriteMapTest {
+    public static void main(String[] args) throws InterruptedException, BrokenBarrierException {
+        final int N_THREADS = 8;
+
+        Map<Integer, String> map = new HashMap();
+        for (int i = 0; i < N_THREADS; i++) map.put(i, String.valueOf(i));
+
+        ReadWriteMap<Integer, String> readWriteMap = new ReadWriteMap(map);
+
+        ThreadPoolExecutor pool = new ThreadPoolExecutor(N_THREADS, N_THREADS, 0L, TimeUnit.MICROSECONDS, new LinkedBlockingQueue<>());
+        CyclicBarrier cyclicBarrier = new CyclicBarrier(8); // 保证线程池内的所有线程同时进行
+
+        for (int i = 0; i < N_THREADS - 1; i++) pool.execute(createThread(cyclicBarrier, () -> readWriteMap.get(6), true));
+        pool.execute(createThread(cyclicBarrier, () -> readWriteMap.put(6, "1111110"), false));
+
+        writeLockIfUseSharedLockExample(pool);
+
+        pool.shutdown();
+    }
+
+    private static Runnable createThread(CyclicBarrier cyclicBarrier, Supplier<String> func, boolean hasDesc) {
+        return () -> {
+            String result = null;
+            try {
+                cyclicBarrier.await();
+                result = func.get();
+            }
+            catch (InterruptedException e) { e.printStackTrace(); }
+            catch (BrokenBarrierException e) { e.printStackTrace(); }
+            if (hasDesc) System.out.println(Thread.currentThread().getName() + "获取结果：" + result);
+        };
+    }
+
+    private static void writeLockIfUseSharedLockExample(ExecutorService pool) {
+        AtomicInteger atomicInteger = new AtomicInteger();
+        CyclicBarrier cyclicBarrier = new CyclicBarrier(2);
+        Function<Integer, Runnable> createThread = threadIdentifier -> () -> {
+            try {
+                cyclicBarrier.await();
+                System.out.println("线程" + threadIdentifier + " before: " + atomicInteger.get());
+                atomicInteger.compareAndSet(0, threadIdentifier);
+                System.out.println("线程" + threadIdentifier + " after: " + atomicInteger.get());
+            } catch (InterruptedException|BrokenBarrierException e) { e.printStackTrace(); }
+        };
+
+        for (int i = 1; i <= 2; i++) pool.execute(createThread.apply(i));
+    }
+}
+
+// 非阻塞的多线程生成链表演示
+class CustomLinkedQueue<E> {
+    private static class Node<E> {
+        private final E element;
+        private final AtomicReference<Node<E>> next;
+        public Node(E element, Node<E> next) {
+            this.element = element;
+            this.next = new AtomicReference<Node<E>>(next);
+        }
+
+        public E getElement() { return element; }
+        public Node<E> getNext() { return next.get(); }
+    }
+    private final Node<E> dummy = new Node<>(null, null);
+
+    public Node<E> getHead() { return head.get(); }
+
+    private final AtomicReference<Node<E>> head = new AtomicReference<>(dummy);
+    private final AtomicReference<Node<E>> tail = new AtomicReference<>(dummy);
+
+    public boolean put(E item) {
+        Node<E> node = new Node<>(item, null);
+        while (true) {
+            Node<E> currentTail = tail.get();
+            Node<E> tailNext = currentTail.next.get();
+            if (currentTail == tail.get()) {    // 只有找到真正的尾节点时才可以进行put操作(因为要获取最新的tail节点)
+                if (tailNext != null) tail.compareAndSet(currentTail, tailNext);    // 如果在中间状态，则更新指向当前节点的指针指向下一个节点
+                else {
+                    if (currentTail.next.compareAndSet(null, node)) {   // 到达最后尾部时，设置新的尾节点
+                        tail.compareAndSet(currentTail, node);  // 更新尾节点指向
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        CustomLinkedQueue customLinkedQueue = new CustomLinkedQueue();
+        final int N_THREADS = Runtime.getRuntime().availableProcessors();
+        ExecutorService pool = Executors.newFixedThreadPool(N_THREADS);
+        for (int i = 0; i < N_THREADS; i++) {
+            int finalI = i;
+            pool.submit(() -> customLinkedQueue.put(finalI));
+        }
+
+        try {
+            pool.shutdown();
+            pool.awaitTermination(Integer.MAX_VALUE, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        List<Integer> linkedNode = new ArrayList<>(N_THREADS);
+        for (Node<Integer> node = customLinkedQueue.getHead().getNext(); node != null; node = node.next.get()) linkedNode.add(node.element);
+        System.out.println("非阻塞多线程生成链表的结果是：" + StringJoinUtil.join(linkedNode, " -> "));
+    }
+}
+
+// 设置线程的优先级并不会保证CPU先执行优先级较大的线程，具体还是要看CPU调度分配，优先级较大的线程"可能"会被CPU优先选择，所以通常不要设置线程的优先级
+class SimpleThreadPrioritiesExample implements Runnable {
+    private int countdown = 5;
+    private volatile double d;
+    private int priority;
+    private String threadName;
+    public SimpleThreadPrioritiesExample(int priority, String threadName) {
+        this.priority = priority;
+        this.threadName = threadName;
+    }
+
+    @Override public void run() {
+        Thread currentThread = Thread.currentThread();
+        currentThread.setPriority(priority);
+        currentThread.setName(threadName);
+        while (true) {
+            // 设置一个昂贵的计算
+            for (int i = 1; i < 100000; i++) {
+                d += (Math.PI + Math.E) / (double) i;
+                if (i % 1000 == 0) Thread.yield();
+            }
+            System.out.println(this);
+            if (--countdown == 0) return;
+        }
+    }
+    @Override public String toString() { return Thread.currentThread() + ": " + countdown; }
+
+    public static void main(String[] args) {
+        ExecutorService pool = Executors.newCachedThreadPool();
+        for (int i = 0; i < 5; i++) pool.execute(new SimpleThreadPrioritiesExample(Thread.MIN_PRIORITY, "Thread min priority"));
+        pool.execute(new SimpleThreadPrioritiesExample(Thread.MAX_PRIORITY, "Thread max priority"));
+        pool.shutdown();
+    }
+}
+
+class ADaemon implements Runnable {
+    @Override public void run() {
+        InterruptedException exception = null;
+        try {
+            System.out.println("这是一个守护线程！即使没有显示设置为守护线程，当父线程创建时被设置了守护线程时，子线程也是继承父线程的，也就是说父线程是什么线程，那么子线程也是什么线程");
+            TimeUnit.SECONDS.sleep(1);
+        } catch (InterruptedException e) {
+            exception = e;
+        } finally {
+            if (exception != null) {
+                System.out.println("线程被中断了");
+                Thread.currentThread().interrupt();
+            }
+            System.out.println(
+                    ColorTextTool.createRandomColorText(
+                            ColorTextTool.createRandomColorText(
+                                    "finally语句可能永远不会得到执行！因为当非守护线程执行完毕后，守护线程也会立即终止运行，所以不会保证finally语句可以被执行！\n") +
+                                    ColorTextTool.createRandomColorText(
+                                            "唯一的一种情况是当非守护线程执行的时间大于守护线程的执行时间时，finally语句会被执行，这种行为是正确的！" +
+                                                    "因此，不要妄想在守护线程的finally语句中做一些清理操作！\n") +
+                                    ColorTextTool.createRandomColorText("可以在下面的DaemonsDontRunFinally类main方法中最后处加一条TimeUnit.SECONDS.sleep(2)\n") +
+                                    ColorTextTool.createRandomColorText(
+                                           "注意：睡眠参数要保证大于守护线程的睡眠时间即可看到可以正常执行finally语句！" +
+                                           "但如果睡眠时间和守护线程一样，即：1，那么如果守护线程的运行时间大于非守护线程的话，那么finally语句也不会得到执行！" +
+                                           "必须保证守护线程运行的时间要小于非守护线程的时间！")));
+        }
+    }
+}
+
+class DaemonsDontRunFinally {
+    public static void main(String[] args) throws InterruptedException {
+        Thread daemonThread = new Thread(new ADaemon());
+        daemonThread.setDaemon(true);
+        daemonThread.start();
+        TimeUnit.SECONDS.sleep(2);
     }
 }
 
