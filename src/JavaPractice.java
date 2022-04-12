@@ -28,8 +28,8 @@ import java.awt.event.ActionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.font.FontRenderContext;
+import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
-import java.beans.Introspector;
 import java.io.*;
 import java.lang.annotation.Annotation;
 import java.lang.annotation.*;
@@ -6726,6 +6726,701 @@ class DaemonsDontRunFinally {
         daemonThread.setDaemon(true);
         daemonThread.start();
         TimeUnit.SECONDS.sleep(2);
+    }
+}
+
+// 银行出纳员仿真，实际就是个生产-消费模型
+// 顾客
+class Customer {
+    private final int serviceTime;
+    public Customer(int serviceTime) { this.serviceTime = serviceTime; }
+    public int getServiceTime() { return serviceTime; }
+    @Override public String toString() { return "[ " + serviceTime + " ]"; }
+}
+
+class CustomerQueue extends ArrayBlockingQueue<Customer> {
+    public CustomerQueue(int maxLineSize) { super(maxLineSize); }
+    @Override public String toString() {
+        if (size() == 0) return "[empty]";
+        return this.stream().reduce(new StringBuilder(), StringBuilder::append, StringBuilder::append).toString();
+    }
+}
+
+// 构建顾客，生产者
+class CustomerGenerator implements Runnable {
+    private CustomerQueue customers;
+    private static Random random = new Random(47);
+    public CustomerGenerator(CustomerQueue customers) { this.customers = customers; }
+    @Override public void run() {
+        try {
+            while (!Thread.interrupted()) {
+                TimeUnit.MILLISECONDS.sleep(random.nextInt(300));
+                customers.put(new Customer(random.nextInt(1000)));
+            }
+        } catch (InterruptedException e) {
+            System.out.println("CustomerGenerator interrupted");
+        }
+        System.out.println("CustomerGenerator terminating");
+    }
+}
+
+// 出纳员，消费者
+class Teller implements Runnable, Comparable<Teller> {
+    private static int counter = 0;
+    private final int id = counter++;
+    private int customerServed = 0;
+    private CustomerQueue customers;
+    private boolean servingCustomerQueue = true;
+    public Teller(CustomerQueue customers) { this.customers = customers; }
+
+    public synchronized void doSomethingElse() {
+        customerServed = 0;
+        servingCustomerQueue = false;
+    }
+
+    public synchronized void serveCustomer() {
+        servingCustomerQueue = true;
+        notifyAll();
+    }
+
+    public String shortString() { return "T" + id; }
+
+    @Override public void run() {
+        try {
+            while (!Thread.interrupted()) {
+                Customer customer = customers.take();   // 每一位出纳员处理一位顾客的需求(想象银行窗口的工作人员)
+                TimeUnit.MILLISECONDS.sleep(customer.getServiceTime()); // 模拟处理业务的时间
+                synchronized (this) {
+                    customerServed++;
+                    while (!servingCustomerQueue) wait();   // 如果没有顾客了，则需要休息，准备迎接下一位顾客
+                }
+            }
+        } catch (InterruptedException e) {
+            System.out.println(this + "interrupted");
+        }
+        System.out.println(this + "terminating");
+    }
+
+    @Override public String toString() { return "Teller " + id + " "; }
+    @Override public synchronized int compareTo(Teller teller) {    // 模拟处理顾客业务量最少的出纳员优先准备下一次接待顾客，因为处理业务多的出纳员太累了
+        return customerServed < teller.customerServed ? -1 : (customerServed == teller.customerServed ? 0 : 1);
+    }
+}
+
+// 出纳员管理类，出纳员是否进行服务，是否去干别的事，是否需要增加出纳员都是由这个类来管理
+class TellerManager implements Runnable {
+    private ExecutorService executorService;    // 服务顾客的地方，相当于银行窗口
+    private CustomerQueue customers;    // 顾客列表，相当于取号机
+    private PriorityQueue<Teller> workingTellers = new PriorityQueue<>();   // 出纳员工作队列
+    private Queue<Teller> tellerDoingOtherThings = new LinkedList<>();  // 正在做其他事情的出纳员列表
+    private int adjustmentPeriod;   // 调整期，相当于实际的排班
+    private static Random random = new Random(47);
+    public TellerManager(ExecutorService executorService, CustomerQueue customers, int adjustmentPeriod) {
+        this.executorService = executorService;
+        this.customers = customers;
+        this.adjustmentPeriod = adjustmentPeriod;
+        Teller teller = new Teller(customers);
+        executorService.execute(teller);
+        workingTellers.add(teller);
+    }
+
+    public void adjustTellerNumber() {
+        if (customers.size() / workingTellers.size() > 2) { // 如果顾客的数量多于正在做其他事情的出纳员数量的2倍以上
+            if (tellerDoingOtherThings.size() > 0) {    // 则抽调一名正在做其他事情的出纳员进行接待并处理顾客的业务需求
+                Teller teller = tellerDoingOtherThings.remove();
+                teller.serveCustomer(); // 设置正在接待并处理顾客业务需求
+                workingTellers.offer(teller);   // 添加进工作队列
+                return;
+            }
+            Teller teller = new Teller(customers);  // 没有正在做其他事情的出纳员的话，则创建一个出纳员进行服务
+            executorService.execute(teller);
+            workingTellers.add(teller);
+            return;
+        }
+        // 如果正在窗口等待的出纳员多于顾客的数量，则减少正在等待的出纳员，避免浪费资源
+        if (workingTellers.size() > 1 && customers.size() / workingTellers.size() < 2) transferWindowWaitingTeller();
+        if (customers.size() == 0)  // 如果没有顾客的话，则指定所有正在窗口等待的出纳员去干别的事
+            while (workingTellers.size() > 0)
+                transferWindowWaitingTeller();
+    }
+
+    private void transferWindowWaitingTeller() {  // 抽调一名窗口等待的出纳员
+        Teller teller = workingTellers.poll();
+        teller.doSomethingElse();
+        tellerDoingOtherThings.offer(teller);
+    }
+
+    @Override public void run() {
+        try {
+            while (!Thread.interrupted()) {
+                TimeUnit.MILLISECONDS.sleep(adjustmentPeriod);
+                adjustTellerNumber();
+                System.out.print(customers + " -> Teller list in service: { ");
+                workingTellers.forEach(teller -> System.out.print(teller.shortString() + " "));
+                System.out.print(" } \n");
+            }
+        } catch (InterruptedException e) {
+            System.out.println(this + "interrupted");
+        }
+        System.out.println(this + "terminating");
+    }
+
+    @Override public String toString() { return "TellerManager "; }
+}
+
+class BankTellerSimulation {
+    private static int MAX_LINE_SIZE = 50;
+    private static int ADJUSTMENT_PERIOD = 1000;
+    public static void main(String[] args) throws IOException {
+        ExecutorService pool = Executors.newCachedThreadPool();
+        CustomerQueue customers = new CustomerQueue(MAX_LINE_SIZE);
+        pool.execute(new CustomerGenerator(customers));
+        pool.execute(new TellerManager(pool, customers, ADJUSTMENT_PERIOD));
+        System.out.println("Press 'Enter' to quit");
+        System.in.read();
+        pool.shutdownNow();
+    }
+}
+
+// 测试同步工具性能
+abstract class Accumulator {
+    public static long cycles = 50000L;
+    private static final int N = Runtime.getRuntime().availableProcessors() >> 1;
+    public static ExecutorService exec = Executors.newFixedThreadPool(N * 2);
+    private static CyclicBarrier barrier = new CyclicBarrier(N * 2 + 1);
+    protected volatile int index = 0;
+    protected volatile long value = 0;
+    protected long duration = 0;
+    protected String id = "error";
+    protected static final int SIZE = 100000;
+    protected static final int[] preLoaded = new int[SIZE];
+
+    static {
+        Random random = new Random(47);
+        for (int i = 0; i < SIZE; i++) preLoaded[i] = random.nextInt();
+    }
+
+    public Accumulator(String id) { this.id = id; }
+
+    private class Modifier implements Runnable {
+        @Override public void run() {
+            for (long i = 0; i < cycles; i++) accumulate();
+            barrierAwait();
+        }
+    }
+
+    private class Reader implements Runnable {
+        private volatile long value;
+        @Override public void run() {
+            for (long i = 0; i < cycles; i++) value = read();
+            barrierAwait();
+        }
+    }
+
+    public void timedTest() {
+        long start = System.nanoTime();
+        for (int i = 0; i < N; i++) {
+            exec.execute(new Modifier());
+            exec.execute(new Reader());
+        }
+        barrierAwait();
+        duration = System.nanoTime() - start;
+        System.out.printf("%-13s: %13dns\n", id, duration);
+    }
+
+    private void barrierAwait() { try { barrier.await(); } catch (Exception e) { throw new RuntimeException(e); } }
+
+    public static void report(Accumulator acc1, Accumulator acc2) {
+        double delta = (double) acc1.duration / (double) acc2.duration;
+        System.out.printf("%-22s: %-4s %.2fns\n", acc1.id + "/" + acc2.id, delta > 0 ? "more" : "less", delta);
+    }
+
+    public abstract void accumulate();
+    public abstract long read();
+}
+
+class BaseLine extends Accumulator {
+    public BaseLine() { super("BaseLine"); }
+    @Override public void accumulate() {
+        // 这里不能使用index++操作，因为index++对volatile修饰的变量无效，并非是原子操作，所以这里模拟了随机读取，虽然性能上缺失了一些，但也是无奈之举
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        value += preLoaded[random.nextInt(SIZE)];
+    }
+
+    @Override public long read() { return value; }
+}
+
+class SychronizedTest extends Accumulator {
+    public SychronizedTest() { super("Sychronized"); }
+    @Override public synchronized void accumulate() {
+        value += preLoaded[index++];
+        if (index >= SIZE) index = 0;
+    }
+
+    @Override public synchronized long read() { return value; }
+}
+
+class LockTest extends Accumulator {
+    private Lock lock = new ReentrantLock();
+    public LockTest() { super("Lock"); }
+    @Override public void accumulate() {
+        lock.lock();
+        try {
+            value += preLoaded[index++];
+            if (index >= SIZE) index = 0;
+        } finally { lock.unlock(); }
+    }
+
+    @Override public long read() {
+        lock.lock();
+        try { return value; } finally { lock.unlock(); }
+    }
+}
+
+class AtomicTest extends Accumulator {
+    public AtomicTest() { super("Atomic"); }
+    private AtomicInteger index = new AtomicInteger();
+    private AtomicLong value = new AtomicLong();
+    @Override public void accumulate() {
+        int i = index.get();
+        long v = value.get();
+        value.compareAndSet(v, preLoaded[i]);
+        index.compareAndSet(i, i + 1 >= SIZE ? 0 : i + 1);
+    }
+
+    @Override public long read() { return value.get(); }
+}
+
+class SychronizationComparisons {
+    private static Accumulator baseLine = new BaseLine();
+    private static Accumulator sychronizedTest = new SychronizedTest();
+    private static Accumulator lockTest = new LockTest();
+    private static Accumulator atomicTest = new AtomicTest();
+    private static void test() {
+        System.out.println("=============================================================================");
+        System.out.printf("%-12s : %13d times\n", "Cycles", Accumulator.cycles);
+        Accumulator[] accumulators = new Accumulator[] { sychronizedTest, lockTest, atomicTest, baseLine };
+        for (int i = 0; i < accumulators.length; i++) accumulators[i].timedTest();
+        report(accumulators, 1, new HashMap<>());
+    }
+
+    private static void report(Accumulator[] accumulators, int next, Map<String, Integer> cache) {
+        if (next == accumulators.length) return;
+        for (int i = 0; i < accumulators.length; i++) {
+            if (i == next || cache.get(String.valueOf(i) + String.valueOf(next)) != null) return;
+            cache.put(String.valueOf(i) + String.valueOf(next), i + next);
+            Accumulator.report(accumulators[i], accumulators[next]);
+            report(accumulators, next + 1, cache);
+        }
+    }
+
+    public static void main(String[] args) throws IOException {
+        int iterations = 7;
+        System.out.println("Warmup");
+        baseLine.timedTest();
+        for (int i = 0; i < iterations; i++) {
+            test();
+            Accumulator.cycles *= 2;
+        }
+        Accumulator.exec.shutdown();
+    }
+}
+
+abstract class Captcha {
+    protected int width;
+    protected int height;
+    protected int interfereCount;
+    protected Color background;
+    protected Font font;
+    protected String code;
+    protected boolean randomCreated;
+    protected long startTime;
+
+    protected final int LETTERS = 4;
+    protected final int expirationTime = 60;
+
+    protected final Random rand = new Random();
+    protected final StringBuilder verificationCode = new StringBuilder();
+
+    private String fileType;
+    private static int verificationStatus = 0x00;
+    private static final int VERIFICATION_PASSED = 0x11;
+    private static final int VERIFICATION_CODE_ERROR_TIME_NOT_EXPIRED = 0x01;
+    private static final int VERIFICATION_CODE_PASSED_TIME_EXPIRED = 0x10;
+
+    private static final int ZERO_ASCII = 48;
+    private static final int UPPERCASE_A_ASCII = 65;
+    private static final int LOWERCASE_A_ASCII = 97;
+
+    public Captcha(int width, int height) { this(width, height, 0); }
+    public Captcha(int width, int height, String code) { this(width, height, 0, code); }
+    public Captcha(int width, int height, int interfereCount) { this(width, height, interfereCount, null); }
+    public Captcha(int width, int height, int interfereCount, String code) {
+        this.width = width;
+        this.height = height;
+        this.interfereCount = interfereCount;
+        this.background = Color.white;
+        this.code = (randomCreated = code == null) ? createAllCode() : code.substring(0, 4);
+        this.font = new Font(Font.SERIF, Font.PLAIN, (int) (height * 0.6));
+        this.fileType = "png";
+    }
+
+    protected String createAllCode() { return createNumberCode() + createLowercaseLetterCode() + createUppercaseLetterCode(); }
+    protected String createUppercaseLetterCode() { return createCode(26, UPPERCASE_A_ASCII); }
+    protected String createLowercaseLetterCode() { return createCode(26, LOWERCASE_A_ASCII); }
+    protected String createNumberCode() { return createCode(10, ZERO_ASCII); }
+    protected String createCode(int end, int startAscii) {
+        return IntStream.range(0, end)
+                .mapToObj(x -> String.valueOf((char) (startAscii + x)))
+                .collect(StringBuilder::new, StringBuilder::append, StringBuilder::append)
+                .toString();
+    }
+
+    protected byte[] saveImageByteArray(BufferedImage bufferedImage, String fileType) throws IOException {
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+        ImageIO.write(bufferedImage, fileType, byteArrayOutputStream);
+        byte[] bytes = byteArrayOutputStream.toByteArray();
+        startTime = System.currentTimeMillis();
+        return bytes;
+    }
+
+    protected Color generateRandomColor() { return new Color(colorValueOne(), colorValueOne(), colorValueOne()); }
+    private int colorValueOne() { return rand.nextInt(255); }
+
+    protected int getVerificationStatus(String userInputVerificationCode) {
+        int deltaTime = (int) ((System.currentTimeMillis() - startTime) / 1000);
+        boolean isVerificationCodeValid = deltaTime <= expirationTime;
+        boolean isVerificationCodeEquals = getVerificationCode().equals(userInputVerificationCode);
+        if (isVerificationCodeEquals && isVerificationCodeValid) return setAndGetVerificationStatus(VERIFICATION_PASSED);
+        if (!isVerificationCodeValid) return setAndGetVerificationStatus(VERIFICATION_CODE_PASSED_TIME_EXPIRED);
+        return setAndGetVerificationStatus(VERIFICATION_CODE_ERROR_TIME_NOT_EXPIRED);
+    }
+
+    private int setAndGetVerificationStatus(int status) { return (verificationStatus |= status); }
+
+    protected String getVerificationMessage(String userInputVerificationCode) {
+        switch (getVerificationStatus(userInputVerificationCode)) {
+            case VERIFICATION_PASSED: return "校验成功！";
+            case VERIFICATION_CODE_ERROR_TIME_NOT_EXPIRED: return "您输入的验证码不正确，请重新输入！";
+            case VERIFICATION_CODE_PASSED_TIME_EXPIRED: return "验证码已过期，请重新获取！";
+            default: return "验证码不能为空！";
+        }
+    }
+
+    public String getCode() { return code; }
+    public Random getRand() { return rand; }
+    public String getFileType() { return fileType; }
+    public String getVerificationCode() { return verificationCode.toString(); }
+
+    public void setFont(Font font) { this.font = font; }
+    public void setCode(String code) { this.code = code; }
+    public void setFileType(String fileType) { this.fileType = fileType; }
+    public void setBackground(Color background) { this.background = background; }
+
+    public abstract byte[] generateVerificationCodeImage();
+}
+
+class LineCaptcha extends Captcha {
+    private record RecordLetter(String letter, int afterRotateLetterWidth, double radian) {}
+    public LineCaptcha(int width, int height) { super(width, height, 5); }
+    public LineCaptcha(int width, int height, String code) { super(width, height, 5, code); }
+    public LineCaptcha(int width, int height, int interfereCount) { super(width, height, interfereCount); }
+
+    @Override public byte[] generateVerificationCodeImage() { return generateVerificationCodeImage(getFileType(), randomCreated, verificationCode, code); }
+
+    public byte[] generateVerificationCodeImage(String fileType, boolean useDefaultVerificationCode, StringBuilder verificationCode, String code) {
+        try {
+            BufferedImage bufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = (Graphics2D) bufferedImage.createGraphics();
+
+            makeImageHighFidelityQuality(g);
+            generateRoundedCanvas(g, bufferedImage);
+
+            generateHotPixel(g);
+            generateInterferenceLine(g);
+            generateVerificationCode(g, useDefaultVerificationCode, verificationCode, code);
+            g.dispose();
+
+            return saveImageByteArray(bufferedImage, fileType);
+        } catch (IOException e) { e.printStackTrace(); }
+
+        return new byte[0];
+    }
+
+    private void makeImageHighFidelityQuality(Graphics2D g) {
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+    }
+
+    private void generateRoundedCanvas(Graphics2D g, BufferedImage bufferedImage) {
+        int width = bufferedImage.getWidth();
+        int height = bufferedImage.getHeight();
+
+        g.fillRoundRect(0, 0, width, height, 20, 20);
+        g.setComposite(AlphaComposite.SrcIn);
+        g.drawImage(bufferedImage, 0, 0, width, height, null);
+    }
+
+    private void generateHotPixel(Graphics2D g) {
+        int hotPixelRatio = (int) (width / height * 0.5);
+        for (int i = 0; i < width * 2; i++) {
+            g.setPaint(generateRandomColor());
+            g.fillOval(rand.nextInt(width), rand.nextInt(height), 2, 2);
+        }
+    }
+
+    private void generateInterferenceLine(Graphics2D g) {
+        for (int i = 0; i < interfereCount; i++) {
+            g.setPaint(generateRandomColor());
+            g.drawLine(rand.nextInt(width), rand.nextInt(height), rand.nextInt(width), rand.nextInt(height));
+        }
+    }
+
+    private void generateVerificationCode(Graphics2D g, boolean useDefaultVerificationCode, StringBuilder verificationCode, String code) {
+        g.setFont(font);
+
+        List<RecordLetter> recordLetters = recordLetterAttribute(g, useDefaultVerificationCode, verificationCode, code);
+        int letterTotalWidth = recordLetters.stream().mapToInt(RecordLetter::afterRotateLetterWidth).sum();
+        int remainingSpace = width - letterTotalWidth;
+        int letterSpace = remainingSpace / 3 / LETTERS;
+
+        int startLetterXPosition = (width - (letterTotalWidth + letterSpace * (LETTERS - 1))) / 2;
+        int endLetterYPosition = height - font.getSize() / 2;
+        for (int i = 0; i < LETTERS; i++) {
+            RecordLetter letter = recordLetters.get(i);
+            g.setPaint(generateRandomColor());
+
+            AffineTransform affineTransform =
+                    AffineTransform.getRotateInstance(
+                            letter.radian(),
+                            startLetterXPosition + letter.afterRotateLetterWidth() / 2,
+                            height / 2
+                    );
+            g.setTransform(affineTransform);
+
+            g.drawString(letter.letter(), startLetterXPosition, endLetterYPosition);
+            startLetterXPosition += letter.afterRotateLetterWidth() + letterSpace;
+        }
+    }
+
+    private List<RecordLetter> recordLetterAttribute(Graphics2D g, boolean useDefaultVerificationCode, StringBuilder verificationCode, String code) {
+        if (verificationCode.length() >= LETTERS) verificationCode.delete(0, LETTERS);
+        List<RecordLetter> recordLetters = new ArrayList<>();
+        FontMetrics fontMetrics = g.getFontMetrics(font);
+        int textHeight = fontMetrics.getHeight();
+        for (int i = 0; i < LETTERS; i++) {
+            String letter = String.valueOf(code.charAt(useDefaultVerificationCode ? rand.nextInt(code.length()) : i));
+            double radian = Math.PI / 5 * rand.nextDouble() * (rand.nextBoolean() ? 1 : -1);
+            int textWidth = fontMetrics.stringWidth(letter);
+            int afterRotateWidth = (int) Math.sqrt(textWidth * textWidth + textHeight * textHeight) / 2;
+            verificationCode.append(letter);
+            recordLetters.add(new RecordLetter(letter, afterRotateWidth, radian));
+        }
+
+        return recordLetters;
+    }
+}
+
+class WriteVerificationCodeImageHelper {
+    private Captcha captcha;
+    private String path;
+    private int maxFilesSavedNumber = 5;
+    private Object lock = new Object();
+    private ExecutorService pool;
+    private volatile File directory;
+    private final PriorityQueue<FileRecordInfo> priorityFiles =
+            new PriorityQueue<FileRecordInfo>(Comparator.comparingLong(fileRecordInfo -> fileRecordInfo.fileAttributes.creationTime().toMillis()));
+
+    public WriteVerificationCodeImageHelper(Captcha captcha, String path) {
+        this.captcha = captcha;
+        this.path = path;
+    }
+
+    private final class FileRecordInfo {
+        public final Path filePath;
+        public final BasicFileAttributes fileAttributes;
+        public FileRecordInfo(Path filePath, BasicFileAttributes fileAttributes) {
+            this.filePath = filePath;
+            this.fileAttributes = fileAttributes;
+        }
+    }
+
+    public void toFile(byte[] bytes) {
+        try {
+            makeImageWriteToFile(bytes);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void toOutStream(byte[] bytes, OutputStream out) {
+        try {
+            makeImageWriteToOutputStream(bytes, out);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void makeImageWriteToFile(byte[] bytes) throws IOException {
+        makeImageWriteToFile(bytes, captcha.getVerificationCode(), false);
+    }
+    private void makeImageWriteToFile(byte[] bytes, String verificationCode, boolean enabledBatchWrite) throws IOException {
+        String normalize = normalizePath(path, captcha.getFileType(), verificationCode);
+        File directory = putVerificationCodeImageIntoAppointFile(normalize);
+        if (this.directory == null) this.directory = directory;
+        if (!enabledBatchWrite) cleanFile(directory, maxFilesSavedNumber);
+        makeImageWriteToOutputStream(bytes, new FileOutputStream(normalize));
+    }
+
+    private String normalizePath(String path, String fileType, String verificationCode) {
+        int findSeparatorPosition = path.indexOf("/");
+        if (findSeparatorPosition == -1) {
+            String filename = StringJoinUtil.join(
+                    new String[] {
+                            path,
+                            String.valueOf(Math.abs(captcha.getRand().nextInt())),
+                            verificationCode,
+                            LocalDateTime.now().format(DateTimeFormatter.ofPattern("YYYY-MM-dd-HH-mm-ss")) + "." + fileType.toLowerCase()
+                    },
+                    "_"
+            );
+
+            String[] appointPath = new String[]{ System.getProperty("user.dir"), "verificationCodeImages", filename };
+            path = StringJoinUtil.join(appointPath, File.separator);
+        }
+
+        return path;
+    }
+
+    private File putVerificationCodeImageIntoAppointFile(String path) throws IOException {
+        File file = new File(path);
+        File parentFile = file.getParentFile();
+
+        if (!parentFile.exists()) parentFile.mkdirs();
+        file.createNewFile();
+
+        return parentFile;
+    }
+
+    public void cleanFile(File directory, int fileNumber) throws IOException {
+        if (directory.listFiles().length > fileNumber) {
+            priorityQueueOfferFiles(directory);
+            deleteEarliestCreationDateFile();
+        }
+    }
+
+    private void priorityQueueOfferFiles(File parentFile) throws IOException {
+        File[] files = parentFile.listFiles();
+        for (int i = 0; i < files.length; i++) {
+            Path filePath = files[i].toPath();
+            priorityFiles.offer(new FileRecordInfo(filePath, Files.readAttributes(filePath, BasicFileAttributes.class)));
+        }
+    }
+
+    private void deleteEarliestCreationDateFile() throws IOException {
+        while (priorityFiles.size() > maxFilesSavedNumber)
+            Files.delete(priorityFiles.poll().filePath);
+    }
+
+    protected void makeImageWriteToOutputStream(byte[] bytes, OutputStream out) throws IOException {
+        if (out instanceof FileOutputStream) {
+            // 使用FileChannel来更快的写入文件，但似乎对于小的文件来说效果不明显
+            FileChannel channel = ((FileOutputStream) out).getChannel();
+            channel.write(ByteBuffer.wrap(bytes));
+            channel.close();
+            out.close();
+        } else {
+            out.write(bytes);
+            out.close();
+        }
+    }
+
+    public String getImageBase64Data(byte[] imageBytes) throws IOException { return Base64.getEncoder().encodeToString(imageBytes); }
+
+    private byte[] generateVerificationCodeImage(String fileType, boolean useDefaultVerificationCode, StringBuilder verificationCode, String code) {
+        return ((LineCaptcha) captcha).generateVerificationCodeImage(fileType, useDefaultVerificationCode, verificationCode, code);
+    }
+
+    public void batchWriteVerificationCodeImagesToFile(int writeNumber) throws IOException {
+        batchWriteVerificationCodeImagesToFile(writeNumber, null, null, true);
+    }
+
+    public void batchWriteVerificationCodeImagesToFile(int writeNumber, String[] codes) {
+        batchWriteVerificationCodeImagesToFile(writeNumber, null, codes, true);
+    }
+
+    public void batchWriteVerificationCodeImagesToFile(int writeNumber, String[] codes, boolean randomCreated) {
+        batchWriteVerificationCodeImagesToFile(writeNumber, null, codes, randomCreated);
+    }
+
+    public void batchWriteVerificationCodeImagesToFile(int writeNumber, byte[] bytes, String[] codes, boolean randomCreated) {
+        pool = pool == null ? Executors.newCachedThreadPool() : pool;
+        long startTime = System.currentTimeMillis();
+        CountDownLatch countDownLatch = new CountDownLatch(writeNumber);
+
+        class BatchWrite implements Runnable {
+            private int index;
+            private String c = captcha.getCode();
+            private Random rand = captcha.getRand();
+            private boolean hasCode = codes != null;
+            private StringBuilder verificationCode = new StringBuilder();
+            public BatchWrite(int index) { this.index = index; }
+            @Override public void run() {
+                String code = c;
+                boolean isRandomCreated = randomCreated;
+                byte[] bs = bytes;
+                if (hasCode) {
+                    code = codes[index % codes.length];
+                    if (isRandomCreated) {
+                        isRandomCreated = rand.nextBoolean() ? false : true;
+                        code = isRandomCreated ? c : code;
+                    }
+                }
+                bs = bs == null ? generateVerificationCodeImage(captcha.getFileType(), isRandomCreated, verificationCode, code) : bs;
+                try {
+                    makeImageWriteToFile(bs, verificationCode.toString(), true);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                } finally {
+                    verificationCode.delete(0, verificationCode.length());
+                    countDownLatch.countDown();
+                }
+            }
+        }
+
+        for (int i = 0; i < writeNumber; i++) pool.execute(new BatchWrite(i));
+        pool.shutdown();
+        try {
+            countDownLatch.await();
+            cleanFile(directory, writeNumber);
+            System.out.println("用时：" + (System.currentTimeMillis() - startTime) + "ms");
+        } catch (InterruptedException | IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void setMaxFilesSavedNumber(int maxFilesSavedNumber) { this.maxFilesSavedNumber = maxFilesSavedNumber; }
+}
+
+class CaptchaFactory {
+    private CaptchaFactory() {}
+    public static Captcha createLineCaptcha(int width, int height) { return new LineCaptcha(width, height); }
+    public static Captcha createLineCaptcha(int width, int height, String code) { return new LineCaptcha(width, height, code); }
+    public static Captcha createLineCaptcha(int width, int height, int interfereCount) { return new LineCaptcha(width, height, interfereCount); }
+}
+
+class LineCaptchaTest {
+    public static void main(String[] args) throws IOException, InterruptedException {
+        Captcha captcha = CaptchaFactory.createLineCaptcha(200, 60);
+        byte[] bytes = captcha.generateVerificationCodeImage();
+        System.out.println(captcha.getVerificationMessage("jiji"));
+
+        WriteVerificationCodeImageHelper writeVerificationCodeImageHelper = new WriteVerificationCodeImageHelper(captcha, "captcha");
+        final int FILES_NUMBER = 12;
+        String[] codes = new String[]{ "大吉大利", "大吉大利", "今晚吃鸡", "今晚吃鸡" };
+        writeVerificationCodeImageHelper.setMaxFilesSavedNumber(FILES_NUMBER);
+        writeVerificationCodeImageHelper.batchWriteVerificationCodeImagesToFile(FILES_NUMBER, codes);
     }
 }
 
