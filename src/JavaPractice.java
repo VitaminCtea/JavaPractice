@@ -1,4 +1,8 @@
 import gbc.GBC;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Marker;
+import org.apache.logging.log4j.MarkerManager;
+import org.apache.logging.log4j.message.Message;
 import org.w3c.dom.CharacterData;
 import org.w3c.dom.Node;
 import org.w3c.dom.*;
@@ -28,7 +32,6 @@ import java.awt.event.ActionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.font.FontRenderContext;
-import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.lang.annotation.Annotation;
@@ -7026,401 +7029,93 @@ class SychronizationComparisons {
     }
 }
 
-abstract class Captcha {
-    protected int width;
-    protected int height;
-    protected int interfereCount;
-    protected Color background;
-    protected Font font;
-    protected String code;
-    protected boolean randomCreated;
-    protected long startTime;
-
-    protected final int LETTERS = 4;
-    protected final int expirationTime = 60;
-
-    protected final Random rand = new Random();
-    protected final StringBuilder verificationCode = new StringBuilder();
-
-    private String fileType;
-    private static int verificationStatus = 0x00;
-    private static final int VERIFICATION_PASSED = 0x11;
-    private static final int VERIFICATION_CODE_ERROR_TIME_NOT_EXPIRED = 0x01;
-    private static final int VERIFICATION_CODE_PASSED_TIME_EXPIRED = 0x10;
-
-    private static final int ZERO_ASCII = 48;
-    private static final int UPPERCASE_A_ASCII = 65;
-    private static final int LOWERCASE_A_ASCII = 97;
-
-    public Captcha(int width, int height) { this(width, height, 0); }
-    public Captcha(int width, int height, String code) { this(width, height, 0, code); }
-    public Captcha(int width, int height, int interfereCount) { this(width, height, interfereCount, null); }
-    public Captcha(int width, int height, int interfereCount, String code) {
-        this.width = width;
-        this.height = height;
-        this.interfereCount = interfereCount;
-        this.background = Color.white;
-        this.code = (randomCreated = code == null) ? createAllCode() : code.substring(0, 4);
-        this.font = new Font(Font.SERIF, Font.PLAIN, (int) (height * 0.6));
-        this.fileType = "png";
+class SQLMessage implements Message {
+    public enum SQLType { UPDATE, QUERY }
+    private final SQLType type;
+    private final String table;
+    private final Map<String, String> cols;
+    public SQLMessage(SQLType type, String table) { this(type, table, null); }
+    public SQLMessage(SQLType type, String table, Map<String, String> cols) {
+        this.type = type;
+        this.table = table;
+        this.cols = cols;
     }
 
-    protected String createAllCode() { return createNumberCode() + createLowercaseLetterCode() + createUppercaseLetterCode(); }
-    protected String createUppercaseLetterCode() { return createCode(26, UPPERCASE_A_ASCII); }
-    protected String createLowercaseLetterCode() { return createCode(26, LOWERCASE_A_ASCII); }
-    protected String createNumberCode() { return createCode(10, ZERO_ASCII); }
-    protected String createCode(int end, int startAscii) {
-        return IntStream.range(0, end)
-                .mapToObj(x -> String.valueOf((char) (startAscii + x)))
-                .collect(StringBuilder::new, StringBuilder::append, StringBuilder::append)
-                .toString();
+    @Override public String getFormattedMessage() {
+        return switch (type) {
+            case QUERY -> createQueryString();
+            case UPDATE -> createUpdateString();
+        };
     }
 
-    protected byte[] saveImageByteArray(BufferedImage bufferedImage, String fileType) throws IOException {
-        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-        ImageIO.write(bufferedImage, fileType, byteArrayOutputStream);
-        byte[] bytes = byteArrayOutputStream.toByteArray();
-        startTime = System.currentTimeMillis();
-        return bytes;
-    }
+    @Override public String getFormat() { return null; }
+    @Override public Object[] getParameters() { return cols.entrySet().toArray(); }
+    @Override public Throwable getThrowable() { return null; }
 
-    protected Color generateRandomColor() { return new Color(colorValueOne(), colorValueOne(), colorValueOne()); }
-    private int colorValueOne() { return rand.nextInt(255); }
-
-    protected int getVerificationStatus(String userInputVerificationCode) {
-        int deltaTime = (int) ((System.currentTimeMillis() - startTime) / 1000);
-        boolean isVerificationCodeValid = deltaTime <= expirationTime;
-        boolean isVerificationCodeEquals = getVerificationCode().equals(userInputVerificationCode);
-        if (isVerificationCodeEquals && isVerificationCodeValid) return setAndGetVerificationStatus(VERIFICATION_PASSED);
-        if (!isVerificationCodeValid) return setAndGetVerificationStatus(VERIFICATION_CODE_PASSED_TIME_EXPIRED);
-        return setAndGetVerificationStatus(VERIFICATION_CODE_ERROR_TIME_NOT_EXPIRED);
-    }
-
-    private int setAndGetVerificationStatus(int status) { return (verificationStatus |= status); }
-
-    protected String getVerificationMessage(String userInputVerificationCode) {
-        switch (getVerificationStatus(userInputVerificationCode)) {
-            case VERIFICATION_PASSED: return "校验成功！";
-            case VERIFICATION_CODE_ERROR_TIME_NOT_EXPIRED: return "您输入的验证码不正确，请重新输入！";
-            case VERIFICATION_CODE_PASSED_TIME_EXPIRED: return "验证码已过期，请重新获取！";
-            default: return "验证码不能为空！";
+    private String createUpdateString() { return "Execute the createUpdateString method"; }
+    private String createQueryString() { return "Execute the createQueryString method"; }
+    public String getMessageFormat() { return type + " " + table; }
+    private String formatCols(Map<String, String> cols) {
+        StringBuilder sb = new StringBuilder();
+        boolean first = true;
+        for (Map.Entry<String, String> entry: cols.entrySet()) {
+            if (!first) sb.append(", ");
+            sb.append(entry.getKey()).append("=").append(entry.getValue());
+            first = false;
         }
-    }
-
-    public String getCode() { return code; }
-    public Random getRand() { return rand; }
-    public String getFileType() { return fileType; }
-    public String getVerificationCode() { return verificationCode.toString(); }
-
-    public void setFont(Font font) { this.font = font; }
-    public void setCode(String code) { this.code = code; }
-    public void setFileType(String fileType) { this.fileType = fileType; }
-    public void setBackground(Color background) { this.background = background; }
-
-    public abstract byte[] generateVerificationCodeImage();
-}
-
-class LineCaptcha extends Captcha {
-    private record RecordLetter(String letter, int afterRotateLetterWidth, double radian) {}
-    public LineCaptcha(int width, int height) { super(width, height, 5); }
-    public LineCaptcha(int width, int height, String code) { super(width, height, 5, code); }
-    public LineCaptcha(int width, int height, int interfereCount) { super(width, height, interfereCount); }
-
-    @Override public byte[] generateVerificationCodeImage() { return generateVerificationCodeImage(getFileType(), randomCreated, verificationCode, code); }
-
-    public byte[] generateVerificationCodeImage(String fileType, boolean useDefaultVerificationCode, StringBuilder verificationCode, String code) {
-        try {
-            BufferedImage bufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-            Graphics2D g = (Graphics2D) bufferedImage.createGraphics();
-
-            makeImageHighFidelityQuality(g);
-            generateRoundedCanvas(g, bufferedImage);
-
-            generateHotPixel(g);
-            generateInterferenceLine(g);
-            generateVerificationCode(g, useDefaultVerificationCode, verificationCode, code);
-            g.dispose();
-
-            return saveImageByteArray(bufferedImage, fileType);
-        } catch (IOException e) { e.printStackTrace(); }
-
-        return new byte[0];
-    }
-
-    private void makeImageHighFidelityQuality(Graphics2D g) {
-        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-        g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-    }
-
-    private void generateRoundedCanvas(Graphics2D g, BufferedImage bufferedImage) {
-        int width = bufferedImage.getWidth();
-        int height = bufferedImage.getHeight();
-
-        g.fillRoundRect(0, 0, width, height, 20, 20);
-        g.setComposite(AlphaComposite.SrcIn);
-        g.drawImage(bufferedImage, 0, 0, width, height, null);
-    }
-
-    private void generateHotPixel(Graphics2D g) {
-        int hotPixelRatio = (int) (width / height * 0.5);
-        for (int i = 0; i < width * 2; i++) {
-            g.setPaint(generateRandomColor());
-            g.fillOval(rand.nextInt(width), rand.nextInt(height), 2, 2);
-        }
-    }
-
-    private void generateInterferenceLine(Graphics2D g) {
-        for (int i = 0; i < interfereCount; i++) {
-            g.setPaint(generateRandomColor());
-            g.drawLine(rand.nextInt(width), rand.nextInt(height), rand.nextInt(width), rand.nextInt(height));
-        }
-    }
-
-    private void generateVerificationCode(Graphics2D g, boolean useDefaultVerificationCode, StringBuilder verificationCode, String code) {
-        g.setFont(font);
-
-        List<RecordLetter> recordLetters = recordLetterAttribute(g, useDefaultVerificationCode, verificationCode, code);
-        int letterTotalWidth = recordLetters.stream().mapToInt(RecordLetter::afterRotateLetterWidth).sum();
-        int remainingSpace = width - letterTotalWidth;
-        int letterSpace = remainingSpace / 3 / LETTERS;
-
-        int startLetterXPosition = (width - (letterTotalWidth + letterSpace * (LETTERS - 1))) / 2;
-        int endLetterYPosition = height - font.getSize() / 2;
-        for (int i = 0; i < LETTERS; i++) {
-            RecordLetter letter = recordLetters.get(i);
-            g.setPaint(generateRandomColor());
-
-            AffineTransform affineTransform =
-                    AffineTransform.getRotateInstance(
-                            letter.radian(),
-                            startLetterXPosition + letter.afterRotateLetterWidth() / 2,
-                            height / 2
-                    );
-            g.setTransform(affineTransform);
-
-            g.drawString(letter.letter(), startLetterXPosition, endLetterYPosition);
-            startLetterXPosition += letter.afterRotateLetterWidth() + letterSpace;
-        }
-    }
-
-    private List<RecordLetter> recordLetterAttribute(Graphics2D g, boolean useDefaultVerificationCode, StringBuilder verificationCode, String code) {
-        if (verificationCode.length() >= LETTERS) verificationCode.delete(0, LETTERS);
-        List<RecordLetter> recordLetters = new ArrayList<>();
-        FontMetrics fontMetrics = g.getFontMetrics(font);
-        int textHeight = fontMetrics.getHeight();
-        for (int i = 0; i < LETTERS; i++) {
-            String letter = String.valueOf(code.charAt(useDefaultVerificationCode ? rand.nextInt(code.length()) : i));
-            double radian = Math.PI / 5 * rand.nextDouble() * (rand.nextBoolean() ? 1 : -1);
-            int textWidth = fontMetrics.stringWidth(letter);
-            int afterRotateWidth = (int) Math.sqrt(textWidth * textWidth + textHeight * textHeight) / 2;
-            verificationCode.append(letter);
-            recordLetters.add(new RecordLetter(letter, afterRotateWidth, radian));
-        }
-
-        return recordLetters;
+        return sb.toString();
     }
 }
 
-class WriteVerificationCodeImageHelper {
-    private Captcha captcha;
-    private String path;
-    private int maxFilesSavedNumber = 5;
-    private Object lock = new Object();
-    private ExecutorService pool;
-    private volatile File directory;
-    private final PriorityQueue<FileRecordInfo> priorityFiles =
-            new PriorityQueue<FileRecordInfo>(Comparator.comparingLong(fileRecordInfo -> fileRecordInfo.fileAttributes.creationTime().toMillis()));
+class MyApp {
+    private org.apache.logging.log4j.Logger logger = LogManager.getLogger(MyApp.class.getName());
+    private static final Marker SQL_MARKER = MarkerManager.getMarker("SQL");
+    private static final Marker UPDATE_MARKER = MarkerManager.getMarker("SQL_UPDATE", SQL_MARKER);
+    private static final Marker QUERY_MARKER = MarkerManager.getMarker("SQL_QUERY", SQL_MARKER);
 
-    public WriteVerificationCodeImageHelper(Captcha captcha, String path) {
-        this.captcha = captcha;
-        this.path = path;
+    public String doQuery(String table) {
+        logger.traceEntry("Query " + table);
+        logger.debug(QUERY_MARKER, new SQLMessage(SQLMessage.SQLType.QUERY, table));
+        return logger.traceExit(table);
     }
 
-    private final class FileRecordInfo {
-        public final Path filePath;
-        public final BasicFileAttributes fileAttributes;
-        public FileRecordInfo(Path filePath, BasicFileAttributes fileAttributes) {
-            this.filePath = filePath;
-            this.fileAttributes = fileAttributes;
-        }
+    public String doUpdate(String table, Map<String, String> params) {
+        logger.traceEntry("Update " + table);
+        logger.debug(UPDATE_MARKER, new SQLMessage(SQLMessage.SQLType.UPDATE, table, params));
+        return logger.traceExit(table);
     }
-
-    public void toFile(byte[] bytes) {
-        try {
-            makeImageWriteToFile(bytes);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    public void toOutStream(byte[] bytes, OutputStream out) {
-        try {
-            makeImageWriteToOutputStream(bytes, out);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void makeImageWriteToFile(byte[] bytes) throws IOException {
-        makeImageWriteToFile(bytes, captcha.getVerificationCode(), false);
-    }
-    private void makeImageWriteToFile(byte[] bytes, String verificationCode, boolean enabledBatchWrite) throws IOException {
-        String normalize = normalizePath(path, captcha.getFileType(), verificationCode);
-        File directory = putVerificationCodeImageIntoAppointFile(normalize);
-        if (this.directory == null) this.directory = directory;
-        if (!enabledBatchWrite) cleanFile(directory, maxFilesSavedNumber);
-        makeImageWriteToOutputStream(bytes, new FileOutputStream(normalize));
-    }
-
-    private String normalizePath(String path, String fileType, String verificationCode) {
-        int findSeparatorPosition = path.indexOf("/");
-        if (findSeparatorPosition == -1) {
-            String filename = StringJoinUtil.join(
-                    new String[] {
-                            path,
-                            String.valueOf(Math.abs(captcha.getRand().nextInt())),
-                            verificationCode,
-                            LocalDateTime.now().format(DateTimeFormatter.ofPattern("YYYY-MM-dd-HH-mm-ss")) + "." + fileType.toLowerCase()
-                    },
-                    "_"
-            );
-
-            String[] appointPath = new String[]{ System.getProperty("user.dir"), "verificationCodeImages", filename };
-            path = StringJoinUtil.join(appointPath, File.separator);
-        }
-
-        return path;
-    }
-
-    private File putVerificationCodeImageIntoAppointFile(String path) throws IOException {
-        File file = new File(path);
-        File parentFile = file.getParentFile();
-
-        if (!parentFile.exists()) parentFile.mkdirs();
-        file.createNewFile();
-
-        return parentFile;
-    }
-
-    public void cleanFile(File directory, int fileNumber) throws IOException {
-        if (directory.listFiles().length > fileNumber) {
-            priorityQueueOfferFiles(directory);
-            deleteEarliestCreationDateFile();
-        }
-    }
-
-    private void priorityQueueOfferFiles(File parentFile) throws IOException {
-        File[] files = parentFile.listFiles();
-        for (int i = 0; i < files.length; i++) {
-            Path filePath = files[i].toPath();
-            priorityFiles.offer(new FileRecordInfo(filePath, Files.readAttributes(filePath, BasicFileAttributes.class)));
-        }
-    }
-
-    private void deleteEarliestCreationDateFile() throws IOException {
-        while (priorityFiles.size() > maxFilesSavedNumber)
-            Files.delete(priorityFiles.poll().filePath);
-    }
-
-    protected void makeImageWriteToOutputStream(byte[] bytes, OutputStream out) throws IOException {
-        if (out instanceof FileOutputStream) {
-            // 使用FileChannel来更快的写入文件，但似乎对于小的文件来说效果不明显
-            FileChannel channel = ((FileOutputStream) out).getChannel();
-            channel.write(ByteBuffer.wrap(bytes));
-            channel.close();
-            out.close();
-        } else {
-            out.write(bytes);
-            out.close();
-        }
-    }
-
-    public String getImageBase64Data(byte[] imageBytes) throws IOException { return Base64.getEncoder().encodeToString(imageBytes); }
-
-    private byte[] generateVerificationCodeImage(String fileType, boolean useDefaultVerificationCode, StringBuilder verificationCode, String code) {
-        return ((LineCaptcha) captcha).generateVerificationCodeImage(fileType, useDefaultVerificationCode, verificationCode, code);
-    }
-
-    public void batchWriteVerificationCodeImagesToFile(int writeNumber) throws IOException {
-        batchWriteVerificationCodeImagesToFile(writeNumber, null, null, true);
-    }
-
-    public void batchWriteVerificationCodeImagesToFile(int writeNumber, String[] codes) {
-        batchWriteVerificationCodeImagesToFile(writeNumber, null, codes, true);
-    }
-
-    public void batchWriteVerificationCodeImagesToFile(int writeNumber, String[] codes, boolean randomCreated) {
-        batchWriteVerificationCodeImagesToFile(writeNumber, null, codes, randomCreated);
-    }
-
-    public void batchWriteVerificationCodeImagesToFile(int writeNumber, byte[] bytes, String[] codes, boolean randomCreated) {
-        pool = pool == null ? Executors.newCachedThreadPool() : pool;
-        long startTime = System.currentTimeMillis();
-        CountDownLatch countDownLatch = new CountDownLatch(writeNumber);
-
-        class BatchWrite implements Runnable {
-            private int index;
-            private String c = captcha.getCode();
-            private Random rand = captcha.getRand();
-            private boolean hasCode = codes != null;
-            private StringBuilder verificationCode = new StringBuilder();
-            public BatchWrite(int index) { this.index = index; }
-            @Override public void run() {
-                String code = c;
-                boolean isRandomCreated = randomCreated;
-                byte[] bs = bytes;
-                if (hasCode) {
-                    code = codes[index % codes.length];
-                    if (isRandomCreated) {
-                        isRandomCreated = rand.nextBoolean() ? false : true;
-                        code = isRandomCreated ? c : code;
-                    }
-                }
-                bs = bs == null ? generateVerificationCodeImage(captcha.getFileType(), isRandomCreated, verificationCode, code) : bs;
-                try {
-                    makeImageWriteToFile(bs, verificationCode.toString(), true);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                } finally {
-                    verificationCode.delete(0, verificationCode.length());
-                    countDownLatch.countDown();
-                }
-            }
-        }
-
-        for (int i = 0; i < writeNumber; i++) pool.execute(new BatchWrite(i));
-        pool.shutdown();
-        try {
-            countDownLatch.await();
-            cleanFile(directory, writeNumber);
-            System.out.println("用时：" + (System.currentTimeMillis() - startTime) + "ms");
-        } catch (InterruptedException | IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    public void setMaxFilesSavedNumber(int maxFilesSavedNumber) { this.maxFilesSavedNumber = maxFilesSavedNumber; }
 }
 
-class CaptchaFactory {
-    private CaptchaFactory() {}
-    public static Captcha createLineCaptcha(int width, int height) { return new LineCaptcha(width, height); }
-    public static Captcha createLineCaptcha(int width, int height, String code) { return new LineCaptcha(width, height, code); }
-    public static Captcha createLineCaptcha(int width, int height, int interfereCount) { return new LineCaptcha(width, height, interfereCount); }
-}
+class Log4jPractice {
+    public static void main(String[] args) throws SQLException {
+        org.apache.logging.log4j.Logger logger = LogManager.getLogger(LogManager.ROOT_LOGGER_NAME);
+        org.apache.logging.log4j.Logger mylog = LogManager.getLogger("mylog");
+        printLog(logger);
+        printLog(mylog);
+        testLoggerBuilder(logger);
 
-class LineCaptchaTest {
-    public static void main(String[] args) throws IOException, InterruptedException {
-        Captcha captcha = CaptchaFactory.createLineCaptcha(200, 60);
-        byte[] bytes = captcha.generateVerificationCodeImage();
-        System.out.println(captcha.getVerificationMessage("jiji"));
+        MyApp app = new MyApp();
+        app.doQuery("Student");
+        app.doUpdate("Student", new HashMap<>(){{ put("灏忔槑", "12"); }});
+    }
 
-        WriteVerificationCodeImageHelper writeVerificationCodeImageHelper = new WriteVerificationCodeImageHelper(captcha, "captcha");
-        final int FILES_NUMBER = 12;
-        String[] codes = new String[]{ "大吉大利", "大吉大利", "今晚吃鸡", "今晚吃鸡" };
-        writeVerificationCodeImageHelper.setMaxFilesSavedNumber(FILES_NUMBER);
-        writeVerificationCodeImageHelper.batchWriteVerificationCodeImagesToFile(FILES_NUMBER, codes);
+    private static void printLog(org.apache.logging.log4j.Logger logger) {
+
+        logger.fatal("fatal level");
+        logger.error("error level");
+        logger.warn("warn level");
+        logger.info("info level");
+        logger.debug("debug level");
+        logger.trace("trace level");
+    }
+
+    private static void testLoggerBuilder(org.apache.logging.log4j.Logger logger) {
+        try {
+            int a = 0;
+            int b = 10 / a;
+        } catch (Exception e) {
+            logger.atInfo().withThrowable(e).log("Unable to process request due to {}", "lala");
+        }
     }
 }
 

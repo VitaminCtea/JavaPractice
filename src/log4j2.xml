@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Configuration status="WARN" monitorInterval="30">
+    <Properties>
+        <Property name="filename">./log4jLogs/app.log</Property>
+        <Property name="formatPattern">%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n</Property>
+        <Property name="patternMatchFormat">%d{HH:mm:ss.SSS} [%p] LoggerName: %c, lineNumber: %L - %m%n</Property>
+    </Properties>
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout>
+                <LevelPatternSelector defaultPattern="%highlight{[%p] %d{HH:mm:ss} %c:%L %m}{bright,red}%n">
+                    <PatternMatch key="WARN" pattern="%highlight{[%p] %d{HH:mm:ss} %c:%L %m}{bright,yellow}%n"/>
+                    <PatternMatch key="INFO" pattern="[%style{%p}{blue}] %d{HH:mm:ss} %c:%L %m%n"/>
+                    <PatternMatch key="DEBUG" pattern="${patternMatchFormat}" />
+                    <PatternMatch key="TRACE" pattern="${patternMatchFormat}"/>
+                </LevelPatternSelector>
+            </PatternLayout>
+        </Console>
+        <RollingFile name="RollingFile" fileName="${filename}" filePattern="./log4jLogs/app-%d{yyyy-MM-dd}.log">
+            <BurstFilter level="INFO" rate="16" maxBurst="100" />
+            <PatternLayout pattern="%d %p %c{1.} [%t] %m%n" />
+            <Policies>
+                <TimeBasedTriggeringPolicy />
+                <SizeBasedTriggeringPolicy size="250M" />
+            </Policies>
+            <DefaultRolloverStrategy max="20" />
+        </RollingFile>
+        <File name="File" fileName="${filename}" append="true">
+            <PatternLayout pattern="${formatPattern}" />
+        </File>
+    </Appenders>
+    <Loggers>
+        <Logger name="mylog" level="trace" additivity="true">
+            <AppenderRef ref="File"/>
+        </Logger>
+        <Root level="trace">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="File"/>
+            <AppenderRef ref="RollingFile" />
+        </Root>
+    </Loggers>
+</Configuration>

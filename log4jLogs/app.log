@@ -1,0 +1,88 @@
+2022-06-02 14:40:04,010 FATAL  [main] fatal level
+2022-06-02 14:40:04,020 ERROR  [main] error level
+2022-06-02 14:40:04,020 WARN  [main] warn level
+2022-06-02 14:40:04,020 INFO  [main] info level
+2022-06-02 14:40:04,020 DEBUG  [main] debug level
+2022-06-02 14:40:04,020 TRACE  [main] trace level
+2022-06-02 14:40:04,020 FATAL mylog [main] fatal level
+2022-06-02 14:40:04,029 ERROR mylog [main] error level
+2022-06-02 14:40:04,029 WARN mylog [main] warn level
+2022-06-02 14:40:04,029 INFO mylog [main] info level
+2022-06-02 14:40:04,029 DEBUG mylog [main] debug level
+2022-06-02 14:40:04,029 TRACE mylog [main] trace level
+2022-06-02 14:40:04,031 INFO  [main] Unable to process request due to lala
+java.lang.ArithmeticException: / by zero
+	at Log4jPractice.testLoggerBuilder(JavaPractice.java:7242) ~[JavaPractice/:?]
+	at Log4jPractice.main(JavaPractice.java:7222) ~[JavaPractice/:?]
+2022-06-02 14:40:04,051 TRACE MyApp [main] Enter Query Student
+2022-06-02 14:40:04,056 DEBUG MyApp [main] Execute the createQueryString method
+2022-06-02 14:40:04,056 TRACE MyApp [main] Exit with(Student)
+2022-06-02 14:40:04,059 TRACE MyApp [main] Enter Update Student
+2022-06-02 14:40:04,059 DEBUG MyApp [main] Execute the createUpdateString method
+2022-06-02 14:40:04,060 TRACE MyApp [main] Exit with(Student)
+2022-06-02 14:51:22,923 FATAL  [main] fatal level
+2022-06-02 14:51:22,929 ERROR  [main] error level
+2022-06-02 14:51:22,930 WARN  [main] warn level
+2022-06-02 14:51:22,930 INFO  [main] info level
+2022-06-02 14:51:22,930 DEBUG  [main] debug level
+2022-06-02 14:51:22,930 TRACE  [main] trace level
+2022-06-02 14:51:22,930 FATAL mylog [main] fatal level
+2022-06-02 14:51:22,930 ERROR mylog [main] error level
+2022-06-02 14:51:22,930 WARN mylog [main] warn level
+2022-06-02 14:51:22,936 INFO mylog [main] info level
+2022-06-02 14:51:22,936 DEBUG mylog [main] debug level
+2022-06-02 14:51:22,938 TRACE mylog [main] trace level
+2022-06-02 14:51:22,940 INFO  [main] Unable to process request due to lala
+java.lang.ArithmeticException: / by zero
+	at Log4jPractice.testLoggerBuilder(JavaPractice.java:7242) ~[JavaPractice/:?]
+	at Log4jPractice.main(JavaPractice.java:7222) ~[JavaPractice/:?]
+2022-06-02 14:51:22,978 TRACE MyApp [main] Enter Query Student
+2022-06-02 14:51:22,979 DEBUG MyApp [main] Execute the createQueryString method
+2022-06-02 14:51:22,983 TRACE MyApp [main] Exit with(Student)
+2022-06-02 14:51:22,983 TRACE MyApp [main] Enter Update Student
+2022-06-02 14:51:22,983 DEBUG MyApp [main] Execute the createUpdateString method
+2022-06-02 14:51:22,983 TRACE MyApp [main] Exit with(Student)
+2022-06-02 14:54:05,783 FATAL  [main] fatal level
+2022-06-02 14:54:05,785 ERROR  [main] error level
+2022-06-02 14:54:05,786 WARN  [main] warn level
+2022-06-02 14:54:05,786 INFO  [main] info level
+2022-06-02 14:54:05,786 DEBUG  [main] debug level
+2022-06-02 14:54:05,787 TRACE  [main] trace level
+2022-06-02 14:54:05,787 FATAL mylog [main] fatal level
+2022-06-02 14:54:05,787 ERROR mylog [main] error level
+2022-06-02 14:54:05,787 WARN mylog [main] warn level
+2022-06-02 14:54:05,788 INFO mylog [main] info level
+2022-06-02 14:54:05,788 DEBUG mylog [main] debug level
+2022-06-02 14:54:05,788 TRACE mylog [main] trace level
+2022-06-02 14:54:05,790 INFO  [main] Unable to process request due to lala
+java.lang.ArithmeticException: / by zero
+	at Log4jPractice.testLoggerBuilder(JavaPractice.java:7242) ~[JavaPractice/:?]
+	at Log4jPractice.main(JavaPractice.java:7222) ~[JavaPractice/:?]
+2022-06-02 14:54:05,805 TRACE MyApp [main] Enter Query Student
+2022-06-02 14:54:05,807 DEBUG MyApp [main] Execute the createQueryString method
+2022-06-02 14:54:05,807 TRACE MyApp [main] Exit with(Student)
+2022-06-02 14:54:05,808 TRACE MyApp [main] Enter Update Student
+2022-06-02 14:54:05,808 DEBUG MyApp [main] Execute the createUpdateString method
+2022-06-02 14:54:05,808 TRACE MyApp [main] Exit with(Student)
+2022-06-02 15:17:08,651 FATAL  [main] fatal level
+2022-06-02 15:17:08,652 ERROR  [main] error level
+2022-06-02 15:17:08,652 WARN  [main] warn level
+2022-06-02 15:17:08,654 INFO  [main] info level
+2022-06-02 15:17:08,654 DEBUG  [main] debug level
+2022-06-02 15:17:08,654 TRACE  [main] trace level
+2022-06-02 15:17:08,654 FATAL mylog [main] fatal level
+2022-06-02 15:17:08,654 ERROR mylog [main] error level
+2022-06-02 15:17:08,654 WARN mylog [main] warn level
+2022-06-02 15:17:08,654 INFO mylog [main] info level
+2022-06-02 15:17:08,654 DEBUG mylog [main] debug level
+2022-06-02 15:17:08,654 TRACE mylog [main] trace level
+2022-06-02 15:17:08,654 INFO  [main] Unable to process request due to lala
+java.lang.ArithmeticException: / by zero
+	at Log4jPractice.testLoggerBuilder(JavaPractice.java:7115) ~[JavaPractice/:?]
+	at Log4jPractice.main(JavaPractice.java:7095) ~[JavaPractice/:?]
+2022-06-02 15:17:08,672 TRACE MyApp [main] Enter Query Student
+2022-06-02 15:17:08,672 DEBUG MyApp [main] Execute the createQueryString method
+2022-06-02 15:17:08,672 TRACE MyApp [main] Exit with(Student)
+2022-06-02 15:17:08,672 TRACE MyApp [main] Enter Update Student
+2022-06-02 15:17:08,672 DEBUG MyApp [main] Execute the createUpdateString method
+2022-06-02 15:17:08,672 TRACE MyApp [main] Exit with(Student)
